@@ -78,6 +78,9 @@ function formatTask(task: Task): void {
   console.log(`Priority: ${PRIORITY_LABELS[task.priority] ?? 'none'}`);
   if (task.dueDate) console.log(`Due:      ${formatDueDate(task.dueDate, task.isAllDay)}`);
   if (task.startDate) console.log(`Start:    ${formatDueDate(task.startDate, task.isAllDay)}`);
+  if (task.tags && task.tags.length > 0) console.log(`Tags:     ${task.tags.map((t) => chalk.cyan(t)).join(', ')}`);
+  if (task.reminders && task.reminders.length > 0) console.log(`Remind:   ${task.reminders.join(', ')}`);
+  if (task.repeatFlag) console.log(`Repeat:   ${task.repeatFlag}`);
   console.log(`Project:  ${chalk.gray(task.projectId)}`);
   console.log(`ID:       ${chalk.gray(task.id)}`);
   if (task.items && task.items.length > 0) {

@@ -17,6 +17,7 @@ export interface Task {
   items?: ChecklistItem[];
   status?: number;
   completedTime?: string;
+  tags?: string[];
 }
 
 export interface ChecklistItem {
@@ -71,6 +72,7 @@ export interface CreateTaskParams {
   sortOrder?: number;
   items?: Omit<ChecklistItem, 'id'>[];
   projectId?: string;
+  tags?: string[];
 }
 
 export interface UpdateTaskParams {
@@ -88,6 +90,7 @@ export interface UpdateTaskParams {
   priority?: number;
   sortOrder?: number;
   items?: ChecklistItem[];
+  tags?: string[];
 }
 
 export interface CreateProjectParams {

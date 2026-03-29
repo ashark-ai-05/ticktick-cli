@@ -10,6 +10,24 @@ function getClient(): TickTickClient {
   return new TickTickClient(getToken);
 }
 
+function parseReminders(input: string): string[] {
+  return input.split(',').map((r) => {
+    const trimmed = r.trim();
+    // Already in TRIGGER format — pass through
+    if (trimmed.startsWith('TRIGGER:')) return trimmed;
+    // Shorthand: 0m, 5m, 30m, 1h, 1d → TRIGGER:-PTxM/H/D (0m = at time)
+    const match = trimmed.match(/^(\d+)([mhd])$/i);
+    if (match) {
+      const amount = parseInt(match[1], 10);
+      const unit = match[2].toUpperCase();
+      if (amount === 0) return 'TRIGGER:PT0S';
+      const isoUnit = unit === 'M' ? 'M' : unit === 'H' ? 'H' : 'D';
+      return `TRIGGER:-PT${amount}${isoUnit}`;
+    }
+    return trimmed;
+  });
+}
+
 export function registerTaskCommands(program: Command): void {
   const tasks = program.command('tasks').description('Manage tasks');
 
@@ -36,10 +54,13 @@ export function registerTaskCommands(program: Command): void {
     .command('create <title>')
     .description('Create a new task')
     .option('--project <projectId>', 'Target project ID')
-    .option('--due <date>', 'Due date (tomorrow, +3d, next monday, 2026-04-01)')
+    .option('--due <date>', 'Due date (tomorrow, +3d, next monday, 2026-04-01T14:30:00+0000)')
     .option('--priority <level>', 'Priority: 0 (none), 1 (low), 3 (medium), 5 (high)')
     .option('--content <text>', 'Task content/description')
-    .action(async (title: string, opts: { project?: string; due?: string; priority?: string; content?: string }) => {
+    .option('--tags <tags>', 'Comma-separated tags (e.g. work,urgent)')
+    .option('--reminder <triggers>', 'Comma-separated reminders (e.g. 0m,5m,30m,1h,1d)')
+    .option('--repeat <rrule>', 'Recurrence rule (e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE)')
+    .action(async (title: string, opts: { project?: string; due?: string; priority?: string; content?: string; tags?: string; reminder?: string; repeat?: string }) => {
       const client = getClient();
       const params: CreateTaskParams = {
         title,
@@ -47,6 +68,9 @@ export function registerTaskCommands(program: Command): void {
         ...(opts.due && { dueDate: parseDate(opts.due) }),
         ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
         ...(opts.content && { content: opts.content }),
+        ...(opts.tags && { tags: opts.tags.split(',').map((t) => t.trim()) }),
+        ...(opts.reminder && { reminders: parseReminders(opts.reminder) }),
+        ...(opts.repeat && { repeatFlag: opts.repeat }),
       };
       const data = await client.createTask(params);
       output(data, program.opts().json);
@@ -57,18 +81,24 @@ export function registerTaskCommands(program: Command): void {
     .description('Update a task')
     .requiredOption('--project <projectId>', 'Project ID (required)')
     .option('--title <title>', 'New title')
-    .option('--due <date>', 'Due date')
+    .option('--due <date>', 'Due date (use "none" to clear)')
     .option('--priority <level>', 'Priority: 0, 1, 3, or 5')
     .option('--content <text>', 'Task content')
-    .action(async (taskId: string, opts: { project: string; title?: string; due?: string; priority?: string; content?: string }) => {
+    .option('--tags <tags>', 'Comma-separated tags (use "none" to clear)')
+    .option('--reminder <triggers>', 'Comma-separated reminders (use "none" to clear)')
+    .option('--repeat <rrule>', 'Recurrence rule (use "none" to clear)')
+    .action(async (taskId: string, opts: { project: string; title?: string; due?: string; priority?: string; content?: string; tags?: string; reminder?: string; repeat?: string }) => {
       const client = getClient();
       const params: UpdateTaskParams = {
         id: taskId,
         projectId: opts.project,
         ...(opts.title && { title: opts.title }),
-        ...(opts.due && { dueDate: parseDate(opts.due) }),
+        ...(opts.due && { dueDate: opts.due === 'none' ? '' : parseDate(opts.due) }),
         ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
         ...(opts.content && { content: opts.content }),
+        ...(opts.tags && { tags: opts.tags === 'none' ? [] : opts.tags.split(',').map((t) => t.trim()) }),
+        ...(opts.reminder && { reminders: opts.reminder === 'none' ? [] : parseReminders(opts.reminder) }),
+        ...(opts.repeat && { repeatFlag: opts.repeat === 'none' ? '' : opts.repeat }),
       };
       const data = await client.updateTask(taskId, params);
       output(data, program.opts().json);

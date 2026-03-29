@@ -113,6 +113,9 @@ server.tool(
     content: z.string().optional().describe('Task content/description'),
     dueDate: z.string().optional().describe('Due date in ISO 8601 format'),
     priority: z.number().optional().describe('Priority: 0 (none), 1 (low), 3 (medium), 5 (high)'),
+    tags: z.array(z.string()).optional().describe('Tags (e.g. ["work", "urgent"])'),
+    reminders: z.array(z.string()).optional().describe('Reminders in TRIGGER format (e.g. ["TRIGGER:PT0S", "TRIGGER:-PT5M"])'),
+    repeatFlag: z.string().optional().describe('Recurrence rule (e.g. "RRULE:FREQ=WEEKLY;BYDAY=MO,WE")'),
   },
   async (params) => {
     const task = await client.createTask(params);
@@ -128,8 +131,11 @@ server.tool(
     projectId: z.string().describe('Project ID (required)'),
     title: z.string().optional().describe('New title'),
     content: z.string().optional().describe('New content'),
-    dueDate: z.string().optional().describe('Due date in ISO 8601'),
+    dueDate: z.string().optional().describe('Due date in ISO 8601 (empty string to clear)'),
     priority: z.number().optional().describe('Priority: 0, 1, 3, or 5'),
+    tags: z.array(z.string()).optional().describe('Tags (empty array to clear)'),
+    reminders: z.array(z.string()).optional().describe('Reminders in TRIGGER format (empty array to clear)'),
+    repeatFlag: z.string().optional().describe('Recurrence rule (empty string to clear)'),
   },
   async ({ taskId, projectId, ...rest }) => {
     const task = await client.updateTask(taskId, { id: taskId, projectId, ...rest });
