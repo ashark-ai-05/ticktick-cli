@@ -13,9 +13,7 @@ function getClient(): TickTickClient {
 function parseReminders(input: string): string[] {
   return input.split(',').map((r) => {
     const trimmed = r.trim();
-    // Already in TRIGGER format — pass through
     if (trimmed.startsWith('TRIGGER:')) return trimmed;
-    // Shorthand: 0m, 5m, 30m, 1h, 1d → TRIGGER:-PTxM/H/D (0m = at time)
     const match = trimmed.match(/^(\d+)([mhd])$/i);
     if (match) {
       const amount = parseInt(match[1], 10);
@@ -26,6 +24,10 @@ function parseReminders(input: string): string[] {
     }
     return trimmed;
   });
+}
+
+function parseSubtasks(input: string): { title: string; status: number }[] {
+  return input.split(',').map((s) => ({ title: s.trim(), status: 0 }));
 }
 
 export function registerTaskCommands(program: Command): void {
@@ -55,22 +57,28 @@ export function registerTaskCommands(program: Command): void {
     .description('Create a new task')
     .option('--project <projectId>', 'Target project ID')
     .option('--due <date>', 'Due date (tomorrow, +3d, next monday, 2026-04-01T14:30:00+0000)')
+    .option('--start <date>', 'Start date (same formats as --due)')
     .option('--priority <level>', 'Priority: 0 (none), 1 (low), 3 (medium), 5 (high)')
     .option('--content <text>', 'Task content/description')
     .option('--tags <tags>', 'Comma-separated tags (e.g. work,urgent)')
+    .option('--subtasks <items>', 'Comma-separated subtask titles (e.g. "step 1,step 2")')
     .option('--reminder <triggers>', 'Comma-separated reminders (e.g. 0m,5m,30m,1h,1d)')
     .option('--repeat <rrule>', 'Recurrence rule (e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE)')
-    .action(async (title: string, opts: { project?: string; due?: string; priority?: string; content?: string; tags?: string; reminder?: string; repeat?: string }) => {
+    .option('--all-day', 'Mark as all-day task')
+    .action(async (title: string, opts: { project?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; subtasks?: string; reminder?: string; repeat?: string; allDay?: boolean }) => {
       const client = getClient();
       const params: CreateTaskParams = {
         title,
         ...(opts.project && { projectId: opts.project }),
         ...(opts.due && { dueDate: parseDate(opts.due) }),
+        ...(opts.start && { startDate: parseDate(opts.start) }),
         ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
         ...(opts.content && { content: opts.content }),
         ...(opts.tags && { tags: opts.tags.split(',').map((t) => t.trim()) }),
+        ...(opts.subtasks && { items: parseSubtasks(opts.subtasks) }),
         ...(opts.reminder && { reminders: parseReminders(opts.reminder) }),
         ...(opts.repeat && { repeatFlag: opts.repeat }),
+        ...(opts.allDay && { isAllDay: true }),
       };
       const data = await client.createTask(params);
       output(data, program.opts().json);
@@ -82,21 +90,41 @@ export function registerTaskCommands(program: Command): void {
     .requiredOption('--project <projectId>', 'Project ID (required)')
     .option('--title <title>', 'New title')
     .option('--due <date>', 'Due date (use "none" to clear)')
+    .option('--start <date>', 'Start date (use "none" to clear)')
     .option('--priority <level>', 'Priority: 0, 1, 3, or 5')
     .option('--content <text>', 'Task content')
-    .option('--tags <tags>', 'Comma-separated tags (use "none" to clear)')
+    .option('--tags <tags>', 'Replace all tags (use "none" to clear)')
+    .option('--add-tag <tag>', 'Add a tag without replacing existing ones')
+    .option('--remove-tag <tag>', 'Remove a specific tag')
     .option('--reminder <triggers>', 'Comma-separated reminders (use "none" to clear)')
     .option('--repeat <rrule>', 'Recurrence rule (use "none" to clear)')
-    .action(async (taskId: string, opts: { project: string; title?: string; due?: string; priority?: string; content?: string; tags?: string; reminder?: string; repeat?: string }) => {
+    .action(async (taskId: string, opts: { project: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string; removeTag?: string; reminder?: string; repeat?: string }) => {
       const client = getClient();
+
+      // For --add-tag and --remove-tag, fetch current task first
+      let currentTags: string[] | undefined;
+      if (opts.addTag || opts.removeTag) {
+        const current = await client.getTask(opts.project, taskId);
+        currentTags = current.tags ?? [];
+        if (opts.addTag) {
+          const newTag = opts.addTag.trim();
+          if (!currentTags.includes(newTag)) currentTags.push(newTag);
+        }
+        if (opts.removeTag) {
+          currentTags = currentTags.filter((t) => t !== opts.removeTag!.trim());
+        }
+      }
+
       const params: UpdateTaskParams = {
         id: taskId,
         projectId: opts.project,
         ...(opts.title && { title: opts.title }),
         ...(opts.due && { dueDate: opts.due === 'none' ? '' : parseDate(opts.due) }),
+        ...(opts.start && { startDate: opts.start === 'none' ? '' : parseDate(opts.start) }),
         ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
         ...(opts.content && { content: opts.content }),
         ...(opts.tags && { tags: opts.tags === 'none' ? [] : opts.tags.split(',').map((t) => t.trim()) }),
+        ...(currentTags && { tags: currentTags }),
         ...(opts.reminder && { reminders: opts.reminder === 'none' ? [] : parseReminders(opts.reminder) }),
         ...(opts.repeat && { repeatFlag: opts.repeat === 'none' ? '' : opts.repeat }),
       };
