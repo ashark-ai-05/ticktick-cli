@@ -47,13 +47,22 @@ export function output(data: unknown, json: boolean): void {
   console.log(data);
 }
 
+function formatDueDate(raw: string, isAllDay?: boolean): string {
+  const d = new Date(raw);
+  const date = raw.substring(0, 10);
+  if (isAllDay) return date;
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return (h === '00' && m === '00') ? date : `${date} ${h}:${m}`;
+}
+
 function formatTasks(tasks: Task[]): void {
-  const header = `${chalk.bold.underline('Title'.padEnd(40))} ${chalk.bold.underline('Due'.padEnd(12))} ${chalk.bold.underline('Priority'.padEnd(10))} ${chalk.bold.underline('ID')}`;
+  const header = `${chalk.bold.underline('Title'.padEnd(40))} ${chalk.bold.underline('Due'.padEnd(18))} ${chalk.bold.underline('Priority'.padEnd(10))} ${chalk.bold.underline('ID')}`;
   console.log(header);
 
   for (const task of tasks) {
     const title = task.title.substring(0, 38).padEnd(40);
-    const due = task.dueDate ? task.dueDate.substring(0, 10).padEnd(12) : chalk.gray('—'.padEnd(12));
+    const due = task.dueDate ? formatDueDate(task.dueDate, task.isAllDay).padEnd(18) : chalk.gray('—'.padEnd(18));
     const priority = (PRIORITY_LABELS[task.priority] ?? chalk.gray('none')).padEnd(10 + 10); // chalk adds hidden chars
     const id = chalk.gray(task.id);
     console.log(`${title} ${due} ${priority} ${id}`);
@@ -67,8 +76,8 @@ function formatTask(task: Task): void {
   console.log(chalk.gray('─'.repeat(40)));
   if (task.content) console.log(`Content:  ${task.content}`);
   console.log(`Priority: ${PRIORITY_LABELS[task.priority] ?? 'none'}`);
-  if (task.dueDate) console.log(`Due:      ${task.dueDate.substring(0, 10)}`);
-  if (task.startDate) console.log(`Start:    ${task.startDate.substring(0, 10)}`);
+  if (task.dueDate) console.log(`Due:      ${formatDueDate(task.dueDate, task.isAllDay)}`);
+  if (task.startDate) console.log(`Start:    ${formatDueDate(task.startDate, task.isAllDay)}`);
   console.log(`Project:  ${chalk.gray(task.projectId)}`);
   console.log(`ID:       ${chalk.gray(task.id)}`);
   if (task.items && task.items.length > 0) {

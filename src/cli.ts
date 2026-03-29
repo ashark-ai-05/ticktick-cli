@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { registerProjectCommands } from './commands/projects.js';
 import { registerTaskCommands } from './commands/tasks.js';
+import { registerNoteCommands } from './commands/notes.js';
 import { loginCommand, logoutCommand } from './commands/login.js';
 import { ApiError } from './types.js';
 
@@ -21,6 +22,7 @@ program.command('logout').description('Clear stored credentials').action(logoutC
 
 registerProjectCommands(program);
 registerTaskCommands(program);
+registerNoteCommands(program);
 
 async function main(): Promise<void> {
   try {
