@@ -118,9 +118,27 @@ export class TickTickClient {
 
   // --- Convenience ---
 
+  async resolveProjectId(nameOrId: string): Promise<string> {
+    // If it looks like an ID (hex string or has digits), try it directly first
+    if (/^[a-f0-9]{20,}$/.test(nameOrId) || nameOrId.startsWith('inbox')) {
+      return nameOrId;
+    }
+    // Otherwise, search by name (case-insensitive, partial match)
+    const projects = await this.getProjects();
+    const lower = nameOrId.toLowerCase();
+    // Strip emoji for matching — compare cleaned names
+    const clean = (s: string) => s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim().toLowerCase();
+    const exact = projects.find((p) => clean(p.name) === lower || p.name.toLowerCase() === lower);
+    if (exact) return exact.id;
+    const partial = projects.find((p) => clean(p.name).includes(lower) || p.name.toLowerCase().includes(lower));
+    if (partial) return partial.id;
+    throw new NotFoundError(`No project matching "${nameOrId}"`);
+  }
+
   async getAllTasks(projectId?: string): Promise<Task[]> {
     if (projectId) {
-      const data = await this.getProjectData(projectId);
+      const resolvedId = await this.resolveProjectId(projectId);
+      const data = await this.getProjectData(resolvedId);
       return data.tasks;
     }
 
@@ -135,5 +153,48 @@ export class TickTickClient {
       }
     }
     return allTasks;
+  }
+
+  async getStatus(): Promise<{
+    overdue: Task[];
+    today: Task[];
+    upcoming: Task[];
+    projectSummary: { id: string; name: string; taskCount: number }[];
+    totalTasks: number;
+  }> {
+    const projects = await this.getProjects();
+    const now = new Date();
+    const todayStr = now.toISOString().substring(0, 10);
+    const weekEnd = new Date(now);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const weekEndStr = weekEnd.toISOString().substring(0, 10);
+
+    const overdue: Task[] = [];
+    const today: Task[] = [];
+    const upcoming: Task[] = [];
+    const projectSummary: { id: string; name: string; taskCount: number }[] = [];
+    let totalTasks = 0;
+
+    for (const project of projects) {
+      if (project.kind === 'NOTE') continue;
+      try {
+        const data = await this.getProjectData(project.id);
+        const tasks = data.tasks.filter((t) => t.status === 0);
+        projectSummary.push({ id: project.id, name: project.name, taskCount: tasks.length });
+        totalTasks += tasks.length;
+
+        for (const task of tasks) {
+          if (!task.dueDate) continue;
+          const due = task.dueDate.substring(0, 10);
+          if (due < todayStr) overdue.push(task);
+          else if (due === todayStr) today.push(task);
+          else if (due <= weekEndStr) upcoming.push(task);
+        }
+      } catch {
+        // Skip
+      }
+    }
+
+    return { overdue, today, upcoming, projectSummary, totalTasks };
   }
 }

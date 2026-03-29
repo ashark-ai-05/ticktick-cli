@@ -36,10 +36,40 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('list')
     .description('List all tasks')
-    .option('--project <projectId>', 'Filter by project')
-    .action(async (opts: { project?: string }) => {
+    .option('--project <nameOrId>', 'Filter by project name or ID')
+    .option('--today', 'Tasks due today')
+    .option('--overdue', 'Tasks past due')
+    .option('--week', 'Tasks due this week')
+    .option('--tag <tag>', 'Filter by tag')
+    .option('--priority <level>', 'Filter by priority (0, 1, 3, or 5)')
+    .action(async (opts: { project?: string; today?: boolean; overdue?: boolean; week?: boolean; tag?: string; priority?: string }) => {
       const client = getClient();
-      const data = await client.getAllTasks(opts.project);
+      let data = await client.getAllTasks(opts.project);
+
+      const now = new Date();
+      const todayStr = now.toISOString().substring(0, 10);
+      const weekEnd = new Date(now);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const weekEndStr = weekEnd.toISOString().substring(0, 10);
+
+      if (opts.today) {
+        data = data.filter((t) => t.dueDate && t.dueDate.substring(0, 10) === todayStr);
+      }
+      if (opts.overdue) {
+        data = data.filter((t) => t.dueDate && t.dueDate.substring(0, 10) < todayStr && t.status === 0);
+      }
+      if (opts.week) {
+        data = data.filter((t) => t.dueDate && t.dueDate.substring(0, 10) >= todayStr && t.dueDate.substring(0, 10) <= weekEndStr);
+      }
+      if (opts.tag) {
+        const tagLower = opts.tag.toLowerCase();
+        data = data.filter((t) => t.tags?.some((tag) => tag.toLowerCase() === tagLower));
+      }
+      if (opts.priority) {
+        const p = parseInt(opts.priority, 10);
+        data = data.filter((t) => t.priority === p);
+      }
+
       output(data, program.opts().json);
     });
 
@@ -55,7 +85,7 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('create <title>')
     .description('Create a new task')
-    .option('--project <projectId>', 'Target project ID')
+    .option('--project <nameOrId>', 'Target project name or ID')
     .option('--due <date>', 'Due date (tomorrow, +3d, next monday, 2026-04-01T14:30:00+0000)')
     .option('--start <date>', 'Start date (same formats as --due)')
     .option('--priority <level>', 'Priority: 0 (none), 1 (low), 3 (medium), 5 (high)')
@@ -67,9 +97,10 @@ export function registerTaskCommands(program: Command): void {
     .option('--all-day', 'Mark as all-day task')
     .action(async (title: string, opts: { project?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; subtasks?: string; reminder?: string; repeat?: string; allDay?: boolean }) => {
       const client = getClient();
+      const resolvedProject = opts.project ? await client.resolveProjectId(opts.project) : undefined;
       const params: CreateTaskParams = {
         title,
-        ...(opts.project && { projectId: opts.project }),
+        ...(resolvedProject && { projectId: resolvedProject }),
         ...(opts.due && { dueDate: parseDate(opts.due) }),
         ...(opts.start && { startDate: parseDate(opts.start) }),
         ...(opts.priority && { priority: parseInt(opts.priority, 10) }),
@@ -87,7 +118,7 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('update <taskId>')
     .description('Update a task')
-    .requiredOption('--project <projectId>', 'Project ID (required)')
+    .requiredOption('--project <nameOrId>', 'Project name or ID (required)')
     .option('--title <title>', 'New title')
     .option('--due <date>', 'Due date (use "none" to clear)')
     .option('--start <date>', 'Start date (use "none" to clear)')
@@ -101,10 +132,12 @@ export function registerTaskCommands(program: Command): void {
     .action(async (taskId: string, opts: { project: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string; removeTag?: string; reminder?: string; repeat?: string }) => {
       const client = getClient();
 
+      const resolvedProject = await client.resolveProjectId(opts.project);
+
       // For --add-tag and --remove-tag, fetch current task first
       let currentTags: string[] | undefined;
       if (opts.addTag || opts.removeTag) {
-        const current = await client.getTask(opts.project, taskId);
+        const current = await client.getTask(resolvedProject, taskId);
         currentTags = current.tags ?? [];
         if (opts.addTag) {
           const newTag = opts.addTag.trim();
@@ -117,7 +150,7 @@ export function registerTaskCommands(program: Command): void {
 
       const params: UpdateTaskParams = {
         id: taskId,
-        projectId: opts.project,
+        projectId: resolvedProject,
         ...(opts.title && { title: opts.title }),
         ...(opts.due && { dueDate: opts.due === 'none' ? '' : parseDate(opts.due) }),
         ...(opts.start && { startDate: opts.start === 'none' ? '' : parseDate(opts.start) }),

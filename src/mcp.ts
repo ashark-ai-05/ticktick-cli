@@ -169,6 +169,29 @@ server.tool(
   },
 );
 
+// --- Convenience Tools ---
+
+server.tool(
+  'ticktick_status',
+  'Get a dashboard summary: overdue tasks, today\'s tasks, upcoming this week, and project task counts',
+  {},
+  async () => {
+    const status = await client.getStatus();
+    return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
+  },
+);
+
+server.tool(
+  'ticktick_resolve_project',
+  'Resolve a project name to its ID (case-insensitive, partial match, emoji-stripped)',
+  { name: z.string().describe('Project name or partial name (e.g. "Work", "groceries")') },
+  async ({ name }) => {
+    const projectId = await client.resolveProjectId(name);
+    const project = await client.getProject(projectId);
+    return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+  },
+);
+
 // --- Start Server ---
 
 async function main(): Promise<void> {
