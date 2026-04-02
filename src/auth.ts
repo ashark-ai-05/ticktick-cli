@@ -27,44 +27,28 @@ function saveCredentials(creds: Credentials): void {
   chmodSync(CREDENTIALS_PATH, 0o600);
 }
 
-export async function refreshToken(): Promise<Credentials> {
-  const config = loadConfig();
-  const creds = loadCredentials();
-
-  const basicAuth = Buffer.from(`${config.client_id}:${config.client_secret}`).toString('base64');
-
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${basicAuth}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: creds.refresh_token,
-    }).toString(),
-  });
-
-  if (!res.ok) {
-    throw new AuthError('Token refresh failed — run `ticktick login` to re-authenticate');
-  }
-
-  const data = (await res.json()) as Record<string, string>;
-  const newCreds: Credentials = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token ?? creds.refresh_token,
-  };
-  saveCredentials(newCreds);
-  return newCreds;
-}
+// TickTick's OAuth does not issue refresh tokens.
+// Access tokens last ~6 months. Re-login is required when they expire.
 
 export async function getToken(): Promise<string> {
-  return loadCredentials().access_token;
+  const creds = loadCredentials();
+  if (creds.expires_at) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (nowSec >= creds.expires_at) {
+      throw new AuthError('Token expired — run `ticktick login` to re-authenticate');
+    }
+    const daysLeft = Math.floor((creds.expires_at - nowSec) / 86400);
+    if (daysLeft <= 7) {
+      console.error(`Warning: token expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — run \`ticktick login\` to renew`);
+    }
+  }
+  return creds.access_token;
 }
 
-export async function login(): Promise<void> {
+export async function login(options?: { manual?: boolean }): Promise<void> {
   const config = loadConfig();
   const state = randomBytes(16).toString('hex');
+  const manual = options?.manual ?? false;
 
   const redirectUrl = new URL(config.redirect_uri);
   const port = parseInt(redirectUrl.port || '8090', 10);
@@ -125,10 +109,12 @@ export async function login(): Promise<void> {
           return;
         }
 
-        const tokenData = (await tokenRes.json()) as Record<string, string>;
+        const tokenData = (await tokenRes.json()) as Record<string, unknown>;
+        const expiresIn = typeof tokenData.expires_in === 'number' ? tokenData.expires_in : undefined;
         const creds: Credentials = {
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
+          access_token: tokenData.access_token as string,
+          refresh_token: tokenData.refresh_token as string | undefined,
+          expires_at: expiresIn ? Math.floor(Date.now() / 1000) + expiresIn : undefined,
         };
         saveCredentials(creds);
 
@@ -142,7 +128,8 @@ export async function login(): Promise<void> {
       }
     });
 
-    server.listen(port, () => {
+    const host = manual ? '0.0.0.0' : undefined;
+    server.listen(port, host, () => {
       const authUrl = new URL(AUTH_URL);
       authUrl.searchParams.set('client_id', config.client_id);
       authUrl.searchParams.set('scope', SCOPES);
@@ -150,7 +137,12 @@ export async function login(): Promise<void> {
       authUrl.searchParams.set('redirect_uri', config.redirect_uri);
       authUrl.searchParams.set('response_type', 'code');
 
-      open(authUrl.toString());
+      if (manual) {
+        console.log(`\nOpen this URL in your browser:\n\n  ${authUrl.toString()}\n`);
+        console.log(`Waiting for callback on ${config.redirect_uri} ...\n`);
+      } else {
+        open(authUrl.toString());
+      }
     });
 
     // Timeout after 2 minutes

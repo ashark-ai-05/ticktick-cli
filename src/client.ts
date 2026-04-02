@@ -11,11 +11,7 @@ import {
   type CreateProjectParams,
   type UpdateProjectParams,
 } from './types.js';
-import { refreshToken } from './auth.js';
-
 export class TickTickClient {
-  private hasRetried = false;
-
   constructor(private getToken: () => Promise<string>) {}
 
   private async request<T>(
@@ -34,23 +30,8 @@ export class TickTickClient {
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
 
-    // Auto-refresh on 401 and retry once
-    if (res.status === 401 && !this.hasRetried) {
-      this.hasRetried = true;
-      try {
-        const newCreds = await refreshToken();
-        this.getToken = async () => newCreds.access_token;
-        return this.request<T>(method, path, body);
-      } catch {
-        throw new AuthError();
-      } finally {
-        this.hasRetried = false;
-      }
-    }
-
     if (res.status === 401) {
-      this.hasRetried = false;
-      throw new AuthError();
+      throw new AuthError('Token expired — run `ticktick login` to re-authenticate');
     }
 
     if (res.status === 404) {

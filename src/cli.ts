@@ -20,7 +20,7 @@ program
   .option('--json', 'Output raw JSON')
   .option('--pretty', 'Human-formatted output (default)');
 
-program.command('login').description('Authenticate with TickTick').action(loginCommand);
+program.command('login').description('Authenticate with TickTick').option('--manual', 'Print auth URL instead of opening browser (for headless/remote machines)').action(loginCommand);
 program.command('logout').description('Clear stored credentials').action(logoutCommand);
 
 program
