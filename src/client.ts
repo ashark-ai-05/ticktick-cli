@@ -99,6 +99,18 @@ export class TickTickClient {
 
   // --- Convenience ---
 
+  /** Resolve a project name (case-insensitive, partial match) to a full Project object. */
+  async resolveProject(name: string): Promise<Project> {
+    const projects = await this.getProjects();
+    const lower = name.toLowerCase();
+    const clean = (s: string) => s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim().toLowerCase();
+    const exact = projects.find((p) => clean(p.name) === lower || p.name.toLowerCase() === lower);
+    if (exact) return exact;
+    const partial = projects.find((p) => clean(p.name).includes(lower) || p.name.toLowerCase().includes(lower));
+    if (partial) return partial;
+    throw new NotFoundError(`No project matching "${name}"`);
+  }
+
   async resolveProjectId(nameOrId: string): Promise<string> {
     // If it looks like an ID (hex string or has digits), try it directly first
     if (/^[a-f0-9]{20,}$/.test(nameOrId) || nameOrId.startsWith('inbox')) {

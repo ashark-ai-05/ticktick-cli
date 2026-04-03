@@ -36,15 +36,18 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('list')
     .description('List all tasks')
-    .option('--project <nameOrId>', 'Filter by project name or ID')
+    .option('--project-id <id>', 'Filter by project ID (exact)')
+    .option('--project <name>', 'Filter by project name (resolved)')
     .option('--today', 'Tasks due today')
     .option('--overdue', 'Tasks past due')
     .option('--week', 'Tasks due this week')
     .option('--tag <tag>', 'Filter by tag')
     .option('--priority <level>', 'Filter by priority (0, 1, 3, or 5)')
-    .action(async (opts: { project?: string; today?: boolean; overdue?: boolean; week?: boolean; tag?: string; priority?: string }) => {
+    .action(async (opts: { projectId?: string; project?: string; today?: boolean; overdue?: boolean; week?: boolean; tag?: string; priority?: string }) => {
       const client = getClient();
-      let data = await client.getAllTasks(opts.project);
+      // --project-id takes precedence over --project
+      const projectFilter = opts.projectId ?? opts.project;
+      let data = await client.getAllTasks(projectFilter);
 
       const now = new Date();
       const todayStr = now.toISOString().substring(0, 10);
@@ -85,7 +88,8 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('create <title>')
     .description('Create a new task')
-    .option('--project <nameOrId>', 'Target project name or ID')
+    .option('--project-id <id>', 'Target project ID (exact; takes precedence over --project)')
+    .option('--project <name>', 'Target project name (resolved; use --project-id for exact IDs)')
     .option('--due <date>', 'Due date (tomorrow, +3d, next monday, 2026-04-01T14:30:00+0000)')
     .option('--start <date>', 'Start date (same formats as --due)')
     .option('--priority <level>', 'Priority: 0 (none), 1 (low), 3 (medium), 5 (high)')
@@ -95,16 +99,18 @@ export function registerTaskCommands(program: Command): void {
     .option('--reminder <triggers>', 'Comma-separated reminders (e.g. 0m,5m,30m,1h,1d)')
     .option('--repeat <rrule>', 'Recurrence rule (e.g. RRULE:FREQ=WEEKLY;BYDAY=MO,WE)')
     .option('--all-day', 'Mark as all-day task')
-    .action(async (title: string, opts: { project?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; subtasks?: string; reminder?: string; repeat?: string; allDay?: boolean }) => {
+    .action(async (title: string, opts: { projectId?: string; project?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; subtasks?: string; reminder?: string; repeat?: string; allDay?: boolean }) => {
       const client = getClient();
       let resolvedProject: string | undefined;
-      if (opts.project) {
+      // --project-id takes precedence; if only --project provided, resolve by name
+      const projectInput = opts.projectId ?? opts.project;
+      if (projectInput) {
         try {
-          resolvedProject = await client.resolveProjectId(opts.project);
+          resolvedProject = opts.projectId ?? await client.resolveProjectId(opts.project!);
           // Validate the project actually exists (catches raw IDs that don't exist)
           await client.getProject(resolvedProject);
         } catch {
-          console.error(chalk.red(`Project not found: ${opts.project}. Run: ticktick projects list`));
+          console.error(chalk.red(`Project not found: ${projectInput}. Run: ticktick projects list`));
           process.exit(1);
         }
       }
@@ -128,7 +134,8 @@ export function registerTaskCommands(program: Command): void {
   tasks
     .command('update <taskId>')
     .description('Update a task')
-    .requiredOption('--project <nameOrId>', 'Project name or ID (required)')
+    .option('--project-id <id>', 'Project ID (exact; takes precedence over --project)')
+    .option('--project <nameOrId>', 'Project name or ID')
     .option('--title <title>', 'New title')
     .option('--due <date>', 'Due date (use "none" to clear)')
     .option('--start <date>', 'Start date (use "none" to clear)')
@@ -139,10 +146,15 @@ export function registerTaskCommands(program: Command): void {
     .option('--remove-tag <tag>', 'Remove a specific tag')
     .option('--reminder <triggers>', 'Comma-separated reminders (use "none" to clear)')
     .option('--repeat <rrule>', 'Recurrence rule (use "none" to clear)')
-    .action(async (taskId: string, opts: { project: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string; removeTag?: string; reminder?: string; repeat?: string }) => {
+    .action(async (taskId: string, opts: { projectId?: string; project?: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string; removeTag?: string; reminder?: string; repeat?: string }) => {
       const client = getClient();
 
-      const resolvedProject = await client.resolveProjectId(opts.project);
+      const projectInput = opts.projectId ?? opts.project;
+      if (!projectInput) {
+        console.error(chalk.red('Either --project-id or --project is required.'));
+        process.exit(1);
+      }
+      const resolvedProject = opts.projectId ?? await client.resolveProjectId(opts.project!);
 
       // For --add-tag and --remove-tag, fetch current task first
       let currentTags: string[] | undefined;
