@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { registerProjectCommands } from './commands/projects.js';
 import { registerTaskCommands } from './commands/tasks.js';
 import { registerNoteCommands } from './commands/notes.js';
-import { loginCommand, logoutCommand } from './commands/login.js';
+import { registerLoginCommands } from './commands/login.js';
 import { ApiError } from './types.js';
 import { TickTickClient } from './client.js';
 import { getToken } from './auth.js';
@@ -20,8 +20,7 @@ program
   .option('--json', 'Output raw JSON')
   .option('--pretty', 'Human-formatted output (default)');
 
-program.command('login').description('Authenticate with TickTick').option('--manual', 'Print auth URL instead of opening browser (for headless/remote machines)').action(loginCommand);
-program.command('logout').description('Clear stored credentials').action(logoutCommand);
+registerLoginCommands(program);
 
 program
   .command('status')
