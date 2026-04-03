@@ -176,6 +176,30 @@ export function registerTaskCommands(program: Command): void {
     });
 
   tasks
+    .command('move <taskId>')
+    .description('Move a task to a different project (get → create in target → delete from source)')
+    .requiredOption('--project-id <id>', 'Source project ID')
+    .requiredOption('--target-project <id>', 'Target project ID')
+    .action(async (taskId: string, opts: { projectId: string; targetProject: string }) => {
+      const client = getClient();
+      const task = await client.getTask(opts.projectId, taskId);
+      const created = await client.createTask({
+        title: task.title,
+        projectId: opts.targetProject,
+        ...(task.content && { content: task.content }),
+        ...(task.tags && { tags: task.tags }),
+        ...(task.priority !== undefined && { priority: task.priority }),
+        ...(task.dueDate && { dueDate: task.dueDate }),
+        ...(task.startDate && { startDate: task.startDate }),
+      });
+      await client.deleteTask(opts.projectId, taskId);
+      if (!program.opts().json) {
+        console.log(chalk.green(`Task moved to project ${opts.targetProject}`));
+      }
+      output(created, program.opts().json);
+    });
+
+  tasks
     .command('complete <projectId> <taskId>')
     .description('Mark a task as complete')
     .action(async (projectId: string, taskId: string) => {
