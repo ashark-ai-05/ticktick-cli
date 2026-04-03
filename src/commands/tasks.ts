@@ -97,7 +97,17 @@ export function registerTaskCommands(program: Command): void {
     .option('--all-day', 'Mark as all-day task')
     .action(async (title: string, opts: { project?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; subtasks?: string; reminder?: string; repeat?: string; allDay?: boolean }) => {
       const client = getClient();
-      const resolvedProject = opts.project ? await client.resolveProjectId(opts.project) : undefined;
+      let resolvedProject: string | undefined;
+      if (opts.project) {
+        try {
+          resolvedProject = await client.resolveProjectId(opts.project);
+          // Validate the project actually exists (catches raw IDs that don't exist)
+          await client.getProject(resolvedProject);
+        } catch {
+          console.error(chalk.red(`Project not found: ${opts.project}. Run: ticktick projects list`));
+          process.exit(1);
+        }
+      }
       const params: CreateTaskParams = {
         title,
         ...(resolvedProject && { projectId: resolvedProject }),
