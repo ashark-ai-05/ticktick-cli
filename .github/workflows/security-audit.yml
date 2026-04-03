@@ -35,10 +35,4 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate lockfile
-        uses: lirantal/lockfile-lint-action@v1
-        with:
-          path: package-lock.json
-          type: npm
-          allowed-hosts: npm
-          validate-https: true
-          validate-integrity: true
+        run: npx lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity
