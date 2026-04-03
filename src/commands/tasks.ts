@@ -142,11 +142,11 @@ export function registerTaskCommands(program: Command): void {
     .option('--priority <level>', 'Priority: 0, 1, 3, or 5')
     .option('--content <text>', 'Task content')
     .option('--tags <tags>', 'Replace all tags (use "none" to clear)')
-    .option('--add-tag <tag>', 'Add a tag without replacing existing ones')
-    .option('--remove-tag <tag>', 'Remove a specific tag')
+    .option('--add-tag <tags...>', 'Add one or more tags without replacing existing ones')
+    .option('--remove-tag <tags...>', 'Remove one or more specific tags')
     .option('--reminder <triggers>', 'Comma-separated reminders (use "none" to clear)')
     .option('--repeat <rrule>', 'Recurrence rule (use "none" to clear)')
-    .action(async (taskId: string, opts: { projectId?: string; project?: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string; removeTag?: string; reminder?: string; repeat?: string }) => {
+    .action(async (taskId: string, opts: { projectId?: string; project?: string; title?: string; due?: string; start?: string; priority?: string; content?: string; tags?: string; addTag?: string[]; removeTag?: string[]; reminder?: string; repeat?: string }) => {
       const client = getClient();
 
       const projectInput = opts.projectId ?? opts.project;
@@ -156,17 +156,20 @@ export function registerTaskCommands(program: Command): void {
       }
       const resolvedProject = opts.projectId ?? await client.resolveProjectId(opts.project!);
 
-      // For --add-tag and --remove-tag, fetch current task first
+      // For --add-tag and --remove-tag, fetch current task first to merge tags
       let currentTags: string[] | undefined;
       if (opts.addTag || opts.removeTag) {
         const current = await client.getTask(resolvedProject, taskId);
         currentTags = current.tags ?? [];
         if (opts.addTag) {
-          const newTag = opts.addTag.trim();
-          if (!currentTags.includes(newTag)) currentTags.push(newTag);
+          for (const tag of opts.addTag) {
+            const trimmed = tag.trim();
+            if (trimmed && !currentTags.includes(trimmed)) currentTags.push(trimmed);
+          }
         }
         if (opts.removeTag) {
-          currentTags = currentTags.filter((t) => t !== opts.removeTag!.trim());
+          const toRemove = new Set(opts.removeTag.map((t) => t.trim()));
+          currentTags = currentTags.filter((t) => !toRemove.has(t));
         }
       }
 
