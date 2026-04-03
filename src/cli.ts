@@ -6,7 +6,7 @@ import { registerProjectCommands } from './commands/projects.js';
 import { registerTaskCommands } from './commands/tasks.js';
 import { registerNoteCommands } from './commands/notes.js';
 import { registerLoginCommands } from './commands/login.js';
-import { ApiError } from './types.js';
+import { ApiError, NetworkError } from './types.js';
 import { TickTickClient } from './client.js';
 import { getToken } from './auth.js';
 import { output } from './formatters.js';
@@ -18,7 +18,8 @@ program
   .description('TickTick CLI — manage tasks and projects from the terminal')
   .version('0.1.0')
   .option('--json', 'Output raw JSON')
-  .option('--pretty', 'Human-formatted output (default)');
+  .option('--pretty', 'Human-formatted output (default)')
+  .option('--verbose', 'Show full error details and request info');
 
 registerLoginCommands(program);
 
@@ -72,16 +73,38 @@ async function main(): Promise<void> {
   try {
     await program.parseAsync(process.argv);
   } catch (err) {
-    if (err instanceof ApiError) {
+    const verbose = program.opts().verbose;
+    if (err instanceof NetworkError) {
       if (program.opts().json) {
-        console.log(JSON.stringify({ error: err.message, statusCode: err.statusCode }));
+        console.log(JSON.stringify({ error: err.message }));
       } else {
         console.error(chalk.red(`Error: ${err.message}`));
       }
       process.exit(1);
     }
+    if (err instanceof ApiError) {
+      if (program.opts().json) {
+        console.log(JSON.stringify({ error: err.message, statusCode: err.statusCode }));
+      } else {
+        console.error(chalk.red(`Error: ${err.message}`));
+        if (verbose) {
+          console.error(chalk.gray(`Status: ${err.statusCode}`));
+        }
+      }
+      process.exit(1);
+    }
+    if (verbose) {
+      console.error(chalk.gray('Full error:'), err);
+    }
     throw err;
   }
+}
+
+// Set TICKTICK_VERBOSE env var early so client.ts picks it up
+// We need to pre-parse --verbose before running commands
+const rawArgs = process.argv;
+if (rawArgs.includes('--verbose')) {
+  process.env.TICKTICK_VERBOSE = '1';
 }
 
 main();

@@ -148,3 +148,10 @@ export class NotFoundError extends ApiError {
     this.name = 'NotFoundError';
   }
 }
+
+export class NetworkError extends Error {
+  constructor(message: string = 'Cannot reach TickTick. Check internet.') {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}

@@ -2,6 +2,7 @@ import { BASE_URL } from './config.js';
 import {
   ApiError,
   AuthError,
+  NetworkError,
   NotFoundError,
   type Task,
   type Project,
@@ -11,6 +12,11 @@ import {
   type CreateProjectParams,
   type UpdateProjectParams,
 } from './types.js';
+
+function isVerbose(): boolean {
+  return process.env.TICKTICK_VERBOSE === '1';
+}
+
 export class TickTickClient {
   constructor(private getToken: () => Promise<string>) {}
 
@@ -19,27 +25,53 @@ export class TickTickClient {
     path: string,
     body?: Record<string, unknown>,
   ): Promise<T> {
-    const token = await this.getToken();
+    let token: string;
+    try {
+      token = await this.getToken();
+    } catch (err) {
+      throw err; // Auth errors propagate as-is
+    }
 
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    const url = `${BASE_URL}${path}`;
+
+    if (isVerbose()) {
+      console.error(`[verbose] ${method} ${url}`, body ? JSON.stringify(body) : '');
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (err) {
+      if (isVerbose()) {
+        console.error('[verbose] Network error:', err);
+      }
+      throw new NetworkError('Cannot reach TickTick. Check internet.');
+    }
+
+    if (isVerbose()) {
+      console.error(`[verbose] Response: ${res.status} ${res.statusText}`);
+    }
 
     if (res.status === 401) {
-      throw new AuthError('Token expired — run `ticktick login` to re-authenticate');
+      throw new AuthError('Token expired. Run: ticktick login');
     }
 
     if (res.status === 404) {
-      throw new NotFoundError();
+      throw new NotFoundError('Not found. Check the ID.');
     }
 
     if (!res.ok) {
       const text = await res.text();
+      if (isVerbose()) {
+        console.error('[verbose] Error body:', text);
+      }
       throw new ApiError(res.status, text || `API error: ${res.statusText}`);
     }
 
