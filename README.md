@@ -1,5 +1,13 @@
 # ticktick-cli
 
+[![CI](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/codeql.yml/badge.svg)](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/codeql.yml)
+[![Security Audit](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/security-audit.yml/badge.svg)](https://github.com/ashark-ai-05/ticktick-cli/actions/workflows/security-audit.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.x-blue)](https://www.typescriptlang.org/)
+[![Version](https://img.shields.io/badge/version-0.1.0-orange)](https://github.com/ashark-ai-05/ticktick-cli)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A TypeScript CLI and MCP server for the [TickTick Open API](https://developer.ticktick.com/docs#/openapi). Manage tasks, projects, and notes from the terminal or through AI agents.
 
 ## Features
